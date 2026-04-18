@@ -70,6 +70,9 @@ mcpw --log-dir ~/copilot-logs
 # Skip injecting telemetry instructions into the session
 mcpw --no-inject
 
+# Disable the granular tool allowances passed to Copilot
+mcpw --no-tool-allowances
+
 # Pass extra arguments directly to the Copilot CLI binary
 mcpw -- --some-copilot-flag value
 ```
@@ -79,14 +82,44 @@ command.
 
 ---
 
+## Tool allowances
+
+By default `mcpw` passes a curated set of `--allow-tool=` flags to the
+Copilot CLI binary.  These map to the same tool set used by the `cpilot`
+helper script and grant granular, least-privilege access (e.g.
+`shell(ls:*)`, `shell(cat:*)`, `github.com`).
+
+Use `--no-tool-allowances` to skip all `--allow-tool=` flags and let Copilot
+apply its own defaults instead.
+
+---
+
 ## Configuration
 
-`mcpw` looks for a config file in this order:
+`mcpw` reads configuration from **two fixed locations**, layered in order:
 
-1. `./mcpw.toml` (next to wherever you run the command)
-2. `~/.config/mcpw/config.toml` (your personal global config)
+| Priority | Path | Description |
+|---|---|---|
+| 1 (lowest) | `~/.config/mcpw/mcpw.toml` | Your personal user-wide config |
+| 2 (highest) | `.github/mcpw.toml` | Per-project config (wins on conflict) |
 
-A `mcpw.toml` example:
+Both files are optional — any absent file is silently skipped.
+
+### Generating a config file
+
+```bash
+# Generate (or scaffold) the user-wide config
+mcpw --gen-conf xdg
+
+# Generate a project-level config in .github/
+mcpw --gen-conf prj
+```
+
+`--gen-conf` writes a pre-commented template to the target path and exits.
+It will not overwrite an existing file.  `--gen-conf prj` returns an error
+if `.github/` does not exist in the current directory.
+
+### Config keys
 
 ```toml
 # The Copilot CLI binary to invoke.
@@ -100,9 +133,12 @@ inject_instructions = true
 
 # Force a specific model (comment out to let Copilot choose).
 # model = "gpt-4o"
+
+# Override the tool allowances list (TOML array of strings).
+# tool_allowances = ["shell(ls:*)", "shell(cat:*)"]
 ```
 
-CLI flags always override the config file.
+CLI flags always override values from either config file.
 
 ---
 
@@ -144,12 +180,13 @@ src/
   mcpw/
     __init__.py         version string
     cli.py              argparse entrypoint — run as `mcpw`
-    config.py           config file loading and precedence rules
+    config.py           config file loading, generation, and precedence rules
     copilot_runner.py   subprocess launcher for the Copilot CLI
     instructions.py     telemetry instruction injection / cleanup
     session_log.py      writes the .md, .json, and .csv outputs
 tests/
   test_cli.py           argument parsing tests
+  test_config.py        config loading, precedence, and --gen-conf tests
   test_copilot_runner.py  command building and session result tests
   test_session_log.py  log file writing tests
 logs/                   session log output (git-ignored)

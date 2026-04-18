@@ -42,11 +42,15 @@ def build_parser() -> argparse.ArgumentParser:
     )
 
     parser.add_argument(
-        "--config",
-        metavar="FILE",
-        type=Path,
+        "--gen-conf",
+        choices=["xdg", "prj"],
+        metavar="{xdg|prj}",
         default=None,
-        help="Path to a mcpw.toml config file (default: auto-detected).",
+        help=(
+            "Generate a starter config file and exit. "
+            "'xdg' writes to ~/.config/mcpw/mcpw.toml; "
+            "'prj' writes to .github/mcpw.toml in the current repository."
+        ),
     )
 
     parser.add_argument(
@@ -96,13 +100,18 @@ def main() -> None:
     parser = build_parser()
     args = parser.parse_args()
 
+    # ── Config generation (early exit, no session started) ────────────────────
+    if args.gen_conf:
+        cfg_module.generate(args.gen_conf)
+        sys.exit(0)
+
     # Strip a leading '--' separator if the user typed it explicitly.
     copilot_args: list[str] = args.copilot_args
     if copilot_args and copilot_args[0] == "--":
         copilot_args = copilot_args[1:]
 
     # ── Load config, then apply CLI overrides ─────────────────────────────────
-    cfg = cfg_module.load(config_file=args.config)
+    cfg = cfg_module.load()
 
     if args.log_dir is not None:
         cfg.log_dir = args.log_dir
