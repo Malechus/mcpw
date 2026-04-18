@@ -144,6 +144,8 @@ CLI flags always override values from either config file.
 
 ## How telemetry capture works
 
+### Instruction-injected telemetry
+
 When `inject_instructions` is enabled, `mcpw` temporarily prepends a block
 to `.github/copilot-instructions.md` that asks Copilot to write a YAML
 session summary (models used, agents used, token estimate, subagent
@@ -154,7 +156,30 @@ the moment the session ends.
 into the markdown log, JSON file, and CSV row.
 
 If Copilot does not write a summary (for example, because `--no-inject` was
-used), the log files are still written but the telemetry fields are empty.
+used), the log files are still written but the instruction-injected fields
+are empty.
+
+### Exit telemetry (stdout capture)
+
+`mcpw` also captures the telemetry block that Copilot CLI prints when it
+exits, for example:
+
+```
+  ╭─╮╭─╮   Changes   +1815 -122
+  ╰─╯╰─╯   Requests  7 Premium (1h 47m 26s)
+  █ ▘▝ █   Tokens    ↑ 4.2m • ↓ 66.9k • 3.9m (cached) • 8.7k (reasoning)
+   ▔▔▔▔    Resume    copilot --resume=cb939fc7-14d0-45db-bdca-905630c1d116
+```
+
+When stdin is a real TTY, `mcpw` runs Copilot through a pseudo-terminal
+(`pty.spawn`) so the interactive session is completely unaffected while
+stdout is captured behind the scenes.  In non-TTY environments (CI, pipes)
+it falls back to `subprocess.run` with no capture.
+
+The parsed fields — `changes_added`, `changes_removed`, `requests_count`,
+`requests_tier`, `requests_duration`, `tokens_sent`, `tokens_received`,
+`tokens_cached`, `tokens_reasoning`, and `resume_id` — are written to the
+CSV, JSON, and markdown log alongside the instruction-injected data.
 
 ---
 
@@ -181,14 +206,16 @@ src/
     __init__.py         version string
     cli.py              argparse entrypoint — run as `mcpw`
     config.py           config file loading, generation, and precedence rules
-    copilot_runner.py   subprocess launcher for the Copilot CLI
+    copilot_runner.py   PTY-based launcher; captures stdout for telemetry parsing
     instructions.py     telemetry instruction injection / cleanup
     session_log.py      writes the .md, .json, and .csv outputs
+    telemetry.py        parses Copilot's exit telemetry block from captured stdout
 tests/
   test_cli.py           argument parsing tests
   test_config.py        config loading, precedence, and --gen-conf tests
   test_copilot_runner.py  command building and session result tests
   test_session_log.py  log file writing tests
+  test_telemetry.py    exit telemetry parsing tests
 logs/                   session log output (git-ignored)
 pyproject.toml          project metadata, dependencies, entrypoint
 ```

@@ -38,6 +38,7 @@ def write_markdown(
     session: SessionResult,
     summary: dict,
     model: str | None,
+    copilot_telemetry: dict | None = None,
 ) -> None:
     """Write a human-readable markdown session log."""
     sid = _session_id(session.start_time)
@@ -90,6 +91,36 @@ def write_markdown(
         lines.append("_No resource usage data was captured for this session._")
     lines.append("")
 
+    # Copilot exit telemetry (parsed from stdout).
+    tel = copilot_telemetry or {}
+    if tel:
+        lines += ["## Copilot exit telemetry", ""]
+        if "changes_added" in tel or "changes_removed" in tel:
+            lines.append(
+                f"- **Changes:** +{tel.get('changes_added', '?')} -{tel.get('changes_removed', '?')}"
+            )
+        if "requests_count" in tel:
+            req = f"- **Requests:** {tel['requests_count']}"
+            if "requests_tier" in tel:
+                req += f" {tel['requests_tier']}"
+            if "requests_duration" in tel:
+                req += f" ({tel['requests_duration']})"
+            lines.append(req)
+        if any(k in tel for k in ("tokens_sent", "tokens_received", "tokens_cached", "tokens_reasoning")):
+            parts = []
+            if "tokens_sent" in tel:
+                parts.append(f"↑ {tel['tokens_sent']:,.0f}")
+            if "tokens_received" in tel:
+                parts.append(f"↓ {tel['tokens_received']:,.0f}")
+            if "tokens_cached" in tel:
+                parts.append(f"{tel['tokens_cached']:,.0f} (cached)")
+            if "tokens_reasoning" in tel:
+                parts.append(f"{tel['tokens_reasoning']:,.0f} (reasoning)")
+            lines.append(f"- **Tokens:** {' • '.join(parts)}")
+        if "resume_id" in tel:
+            lines.append(f"- **Resume ID:** `{tel['resume_id']}`")
+        lines.append("")
+
     # Raw fallback — if Copilot wrote something we couldn't parse.
     raw = summary.get("raw_summary")
     if raw:
@@ -105,6 +136,7 @@ def write_json(
     session: SessionResult,
     summary: dict,
     model: str | None,
+    copilot_telemetry: dict | None = None,
 ) -> None:
     """Write structured JSON metadata for the session."""
     payload = {
@@ -119,6 +151,7 @@ def write_json(
         "agents_used": summary.get("agents_used"),
         "token_estimate": summary.get("token_estimate"),
         "subagent_interactions": summary.get("subagent_interactions"),
+        "copilot_telemetry": copilot_telemetry or {},
     }
     path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
 
@@ -137,6 +170,17 @@ CSV_FIELDNAMES = [
     "models_used",
     "agents_used",
     "token_estimate",
+    # Copilot exit telemetry (parsed from stdout)
+    "changes_added",
+    "changes_removed",
+    "requests_count",
+    "requests_tier",
+    "requests_duration",
+    "tokens_sent",
+    "tokens_received",
+    "tokens_cached",
+    "tokens_reasoning",
+    "resume_id",
 ]
 
 
@@ -145,10 +189,12 @@ def write_csv_row(
     session: SessionResult,
     summary: dict,
     model: str | None,
+    copilot_telemetry: dict | None = None,
 ) -> None:
     """Append one row to the aggregate CSV (creates file + header if needed)."""
     sid = _session_id(session.start_time)
     start_dt = datetime.fromtimestamp(session.start_time, tz=timezone.utc)
+    tel = copilot_telemetry or {}
 
     row = {
         "session_id": sid,
@@ -163,6 +209,17 @@ def write_csv_row(
         "models_used": "|".join(summary.get("models_used") or []),
         "agents_used": "|".join(summary.get("agents_used") or []),
         "token_estimate": summary.get("token_estimate") or "",
+        # Copilot exit telemetry
+        "changes_added": tel.get("changes_added", ""),
+        "changes_removed": tel.get("changes_removed", ""),
+        "requests_count": tel.get("requests_count", ""),
+        "requests_tier": tel.get("requests_tier", ""),
+        "requests_duration": tel.get("requests_duration", ""),
+        "tokens_sent": tel.get("tokens_sent", ""),
+        "tokens_received": tel.get("tokens_received", ""),
+        "tokens_cached": tel.get("tokens_cached", ""),
+        "tokens_reasoning": tel.get("tokens_reasoning", ""),
+        "resume_id": tel.get("resume_id", ""),
     }
 
     write_header = not path.exists() or path.stat().st_size == 0
@@ -181,6 +238,7 @@ def write_all(
     summary: dict,
     log_dir: Path,
     model: str | None,
+    copilot_telemetry: dict | None = None,
 ) -> None:
     """Write all three output files for a completed session."""
     sid = _session_id(session.start_time)
@@ -190,16 +248,19 @@ def write_all(
         session=session,
         summary=summary,
         model=model,
+        copilot_telemetry=copilot_telemetry,
     )
     write_json(
         path=log_dir / f"{sid}_session.json",
         session=session,
         summary=summary,
         model=model,
+        copilot_telemetry=copilot_telemetry,
     )
     write_csv_row(
         path=log_dir / "sessions.csv",
         session=session,
         summary=summary,
         model=model,
+        copilot_telemetry=copilot_telemetry,
     )

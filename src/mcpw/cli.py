@@ -19,6 +19,7 @@ from mcpw import config as cfg_module
 from mcpw import copilot_runner as runner
 from mcpw import instructions
 from mcpw import session_log
+from mcpw import telemetry
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -138,12 +139,16 @@ def main() -> None:
     # ── Read any telemetry Copilot wrote during the session ───────────────────
     summary = instructions.read_summary(summary_path)
 
+    # ── Parse the exit telemetry block Copilot printed to stdout ─────────────
+    copilot_telemetry = telemetry.parse_copilot_telemetry(session.captured_output)
+
     # ── Write the three log outputs ───────────────────────────────────────────
     session_log.write_all(
         session=session,
         summary=summary,
         log_dir=cfg.log_dir,
         model=cfg.model,
+        copilot_telemetry=copilot_telemetry,
     )
 
     # Exit with the same code Copilot used so shell scripts behave correctly.

@@ -28,6 +28,22 @@ def session():
 
 
 @pytest.fixture()
+def copilot_telemetry():
+    return {
+        "changes_added": 1815,
+        "changes_removed": 122,
+        "requests_count": 7,
+        "requests_tier": "Premium",
+        "requests_duration": "1h 47m 26s",
+        "tokens_sent": 4_200_000.0,
+        "tokens_received": 66_900.0,
+        "tokens_cached": 3_900_000.0,
+        "tokens_reasoning": 8_700.0,
+        "resume_id": "cb939fc7-14d0-45db-bdca-905630c1d116",
+    }
+
+
+@pytest.fixture()
 def summary():
     return {
         "models_used": ["gpt-4o", "claude-3-5-sonnet"],
@@ -68,6 +84,19 @@ class TestWriteMarkdown:
         write_markdown(out, session, {}, model=None)
         assert "No subagent interaction data" in out.read_text()
 
+    def test_copilot_telemetry_section_in_markdown(self, tmp_path, session, summary, copilot_telemetry):
+        out = tmp_path / "session.md"
+        write_markdown(out, session, summary, model=None, copilot_telemetry=copilot_telemetry)
+        content = out.read_text()
+        assert "Copilot exit telemetry" in content
+        assert "Premium" in content
+        assert "cb939fc7-14d0-45db-bdca-905630c1d116" in content
+
+    def test_no_telemetry_section_when_empty(self, tmp_path, session, summary):
+        out = tmp_path / "session.md"
+        write_markdown(out, session, summary, model=None)
+        assert "Copilot exit telemetry" not in out.read_text()
+
 
 # ── JSON ──────────────────────────────────────────────────────────────────────
 
@@ -95,6 +124,19 @@ class TestWriteJson:
         write_json(out, session, summary, model=None)
         data = json.loads(out.read_text())
         assert data["token_estimate"] == 12500
+
+    def test_copilot_telemetry_in_json(self, tmp_path, session, summary, copilot_telemetry):
+        out = tmp_path / "session.json"
+        write_json(out, session, summary, model=None, copilot_telemetry=copilot_telemetry)
+        data = json.loads(out.read_text())
+        assert data["copilot_telemetry"]["requests_count"] == 7
+        assert data["copilot_telemetry"]["resume_id"] == "cb939fc7-14d0-45db-bdca-905630c1d116"
+
+    def test_empty_telemetry_in_json(self, tmp_path, session, summary):
+        out = tmp_path / "session.json"
+        write_json(out, session, summary, model=None)
+        data = json.loads(out.read_text())
+        assert data["copilot_telemetry"] == {}
 
 
 # ── CSV ───────────────────────────────────────────────────────────────────────
@@ -124,6 +166,22 @@ class TestWriteCsvRow:
         write_csv_row(csv_path, session, summary, model=None)
         rows = list(csv.DictReader(csv_path.open()))
         assert rows[0]["agents_used"] == "search|code-review"
+
+    def test_telemetry_columns_in_csv(self, tmp_path, session, summary, copilot_telemetry):
+        csv_path = tmp_path / "sessions.csv"
+        write_csv_row(csv_path, session, summary, model=None, copilot_telemetry=copilot_telemetry)
+        rows = list(csv.DictReader(csv_path.open()))
+        assert rows[0]["changes_added"] == "1815"
+        assert rows[0]["requests_count"] == "7"
+        assert rows[0]["requests_tier"] == "Premium"
+        assert rows[0]["resume_id"] == "cb939fc7-14d0-45db-bdca-905630c1d116"
+
+    def test_empty_telemetry_produces_blank_columns(self, tmp_path, session, summary):
+        csv_path = tmp_path / "sessions.csv"
+        write_csv_row(csv_path, session, summary, model=None)
+        rows = list(csv.DictReader(csv_path.open()))
+        assert rows[0]["changes_added"] == ""
+        assert rows[0]["resume_id"] == ""
 
 
 # ── write_all integration ─────────────────────────────────────────────────────

@@ -58,7 +58,9 @@ class TestRunSession:
         mock_result.returncode = 0
 
         with patch("mcpw.copilot_runner.subprocess.run", return_value=mock_result):
-            session = run_session(["copilot"])
+            with patch("mcpw.copilot_runner.sys.stdin") as mock_stdin:
+                mock_stdin.isatty.return_value = False
+                session = run_session(["copilot"])
 
         assert isinstance(session, SessionResult)
 
@@ -67,7 +69,9 @@ class TestRunSession:
         mock_result.returncode = 42
 
         with patch("mcpw.copilot_runner.subprocess.run", return_value=mock_result):
-            session = run_session(["copilot"])
+            with patch("mcpw.copilot_runner.sys.stdin") as mock_stdin:
+                mock_stdin.isatty.return_value = False
+                session = run_session(["copilot"])
 
         assert session.exit_code == 42
 
@@ -77,7 +81,9 @@ class TestRunSession:
         cmd = ["copilot", "--model", "gpt-4o"]
 
         with patch("mcpw.copilot_runner.subprocess.run", return_value=mock_result):
-            session = run_session(cmd)
+            with patch("mcpw.copilot_runner.sys.stdin") as mock_stdin:
+                mock_stdin.isatty.return_value = False
+                session = run_session(cmd)
 
         assert session.command == cmd
 
@@ -87,53 +93,38 @@ class TestRunSession:
 
         before = time.time()
         with patch("mcpw.copilot_runner.subprocess.run", return_value=mock_result):
-            session = run_session(["copilot"])
+            with patch("mcpw.copilot_runner.sys.stdin") as mock_stdin:
+                mock_stdin.isatty.return_value = False
+                session = run_session(["copilot"])
         after = time.time()
 
         assert before <= session.start_time <= after
         assert before <= session.end_time <= after
         assert session.duration_seconds >= 0
 
-
-
-class TestRunSession:
-    def test_returns_session_result(self):
+    def test_non_tty_has_empty_captured_output(self):
         mock_result = MagicMock()
         mock_result.returncode = 0
 
         with patch("mcpw.copilot_runner.subprocess.run", return_value=mock_result):
+            with patch("mcpw.copilot_runner.sys.stdin") as mock_stdin:
+                mock_stdin.isatty.return_value = False
+                session = run_session(["copilot"])
+
+        assert session.captured_output == ""
+
+    def test_pty_path_captures_output(self):
+        # Simulate pty.spawn returning wait status 0 (normal exit, code 0).
+        # On Linux os.WIFEXITED(0)==True and os.WEXITSTATUS(0)==0.
+        def fake_spawn(cmd, master_read=None):
+            return 0  # wait status for clean exit
+
+        with patch("mcpw.copilot_runner._HAS_PTY", True), \
+             patch("mcpw.copilot_runner._pty") as mock_pty, \
+             patch("mcpw.copilot_runner.sys.stdin") as mock_stdin:
+            mock_pty.spawn.side_effect = fake_spawn
+            mock_stdin.isatty.return_value = True
             session = run_session(["copilot"])
 
-        assert isinstance(session, SessionResult)
-
-    def test_exit_code_is_captured(self):
-        mock_result = MagicMock()
-        mock_result.returncode = 42
-
-        with patch("mcpw.copilot_runner.subprocess.run", return_value=mock_result):
-            session = run_session(["copilot"])
-
-        assert session.exit_code == 42
-
-    def test_command_is_stored(self):
-        mock_result = MagicMock()
-        mock_result.returncode = 0
-        cmd = ["copilot", "--model", "gpt-4o"]
-
-        with patch("mcpw.copilot_runner.subprocess.run", return_value=mock_result):
-            session = run_session(cmd)
-
-        assert session.command == cmd
-
-    def test_timing_fields_are_populated(self):
-        mock_result = MagicMock()
-        mock_result.returncode = 0
-
-        before = time.time()
-        with patch("mcpw.copilot_runner.subprocess.run", return_value=mock_result):
-            session = run_session(["copilot"])
-        after = time.time()
-
-        assert before <= session.start_time <= after
-        assert before <= session.end_time <= after
-        assert session.duration_seconds >= 0
+        assert session.exit_code == 0
+        assert isinstance(session.captured_output, str)
