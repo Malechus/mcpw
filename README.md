@@ -1,4 +1,5 @@
-# mcpw — Copilot CLI Wrapper
+# Malechus' CoPilot Wrapper - mcpw
+### Copilot CLI Wrapper
 
 `mcpw` wraps the Copilot CLI to add structured session logging.  After each
 session it writes three output files:
