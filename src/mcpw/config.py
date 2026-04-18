@@ -16,6 +16,22 @@ from pathlib import Path
 
 # ── Defaults ─────────────────────────────────────────────────────────────────
 
+# Granular tool allowances forwarded to Copilot CLI via --allow-tool= flags.
+# Each entry becomes one --allow-tool=<value> argument on the command line.
+# Override the full list in mcpw.toml under the key `tool_allowances`.
+DEFAULT_TOOL_ALLOWANCES: list[str] = [
+    "shell(ls:*)",
+    "shell(cat:*)",
+    "shell(echo:*)",
+    "shell(git fetch)",
+    "shell(git checkout)",
+    "shell(grep:*)",
+    "shell(find:*)",
+    "shell(tail:*)",
+    "shell(head:*)",
+    "url(https://docs.github.com)",
+]
+
 DEFAULTS: dict = {
     # The Copilot CLI binary to invoke.  If Copilot is accessible via a
     # different path or command on your system, override this in mcpw.toml.
@@ -37,6 +53,11 @@ class Config:
     log_dir: Path = field(default_factory=lambda: Path(DEFAULTS["log_dir"]))
     inject_instructions: bool = DEFAULTS["inject_instructions"]
     model: str | None = DEFAULTS["model"]
+    # List of tool allowance strings passed to Copilot as --allow-tool= flags.
+    # Set to an empty list (or use --no-tool-allowances) to disable all limits.
+    tool_allowances: list[str] = field(
+        default_factory=lambda: list(DEFAULT_TOOL_ALLOWANCES)
+    )
 
 
 # ── Loading logic ─────────────────────────────────────────────────────────────
@@ -68,6 +89,8 @@ def load(config_file: Path | None = None) -> Config:
                 "inject_instructions", cfg.inject_instructions
             )
             cfg.model = data.get("model", cfg.model)
+            if "tool_allowances" in data:
+                cfg.tool_allowances = list(data["tool_allowances"])
             break  # stop at first file found
 
     return cfg

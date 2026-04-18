@@ -29,15 +29,23 @@ class SessionResult:
 
 # ── Command building ──────────────────────────────────────────────────────────
 
-def build_command(copilot_cmd: str, extra_args: list[str]) -> list[str]:
+def build_command(
+    copilot_cmd: str,
+    extra_args: list[str],
+    tool_allowances: list[str] | None = None,
+) -> list[str]:
     """
-    Combine the base Copilot command with any extra arguments.
+    Combine the base Copilot command with tool allowance flags and extra args.
+
+    --allow-tool= flags are prepended before extra_args so Copilot sees them
+    before any user-supplied passthrough arguments.
 
     Example:
-        build_command("gh copilot", ["--model", "gpt-4o"])
-        # → ["gh", "copilot", "--model", "gpt-4o"]
+        build_command("copilot", ["--model", "gpt-4o"], ["shell(ls:*)"])
+        # → ["copilot", "--allow-tool=shell(ls:*)", "--model", "gpt-4o"]
     """
-    return [*copilot_cmd.split(), *extra_args]
+    allow_flags = [f"--allow-tool={t}" for t in (tool_allowances or [])]
+    return [*copilot_cmd.split(), *allow_flags, *extra_args]
 
 
 # ── Session runner ────────────────────────────────────────────────────────────

@@ -71,6 +71,17 @@ def build_parser() -> argparse.ArgumentParser:
         help="Skip injecting telemetry instructions into the Copilot session.",
     )
 
+    parser.add_argument(
+        "--no-tool-allowances",
+        action="store_true",
+        default=False,
+        help=(
+            "Disable granular tool allowances. By default mcpw passes a "
+            "curated --allow-tool= list to Copilot CLI. Use this flag to "
+            "let Copilot decide which tools are available."
+        ),
+    )
+
     # Everything after -- lands here as a plain list of strings.
     parser.add_argument(
         "copilot_args",
@@ -99,13 +110,15 @@ def main() -> None:
         cfg.model = args.model
     if args.no_inject:
         cfg.inject_instructions = False
+    if args.no_tool_allowances:
+        cfg.tool_allowances = []
 
     # If a model was specified, append it to the Copilot args.
     if cfg.model:
         copilot_args = ["--model", cfg.model, *copilot_args]
 
     # ── Build the Copilot command ─────────────────────────────────────────────
-    command = runner.build_command(cfg.copilot_cmd, copilot_args)
+    command = runner.build_command(cfg.copilot_cmd, copilot_args, cfg.tool_allowances)
 
     # ── Run the session with optional instruction injection ───────────────────
     cfg.log_dir.mkdir(parents=True, exist_ok=True)

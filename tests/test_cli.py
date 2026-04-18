@@ -44,6 +44,14 @@ class TestBuildParser:
         assert "--foo" in args.copilot_args
         assert "bar" in args.copilot_args
 
+    def test_no_tool_allowances_flag(self):
+        args = self.parser.parse_args(["--no-tool-allowances"])
+        assert args.no_tool_allowances is True
+
+    def test_no_tool_allowances_defaults_to_false(self):
+        args = self.parser.parse_args([])
+        assert args.no_tool_allowances is False
+
     def test_combined_flags_and_passthrough(self):
         args = self.parser.parse_args(["--model", "gpt-4o", "--no-inject", "--", "extra"])
         assert args.model == "gpt-4o"
